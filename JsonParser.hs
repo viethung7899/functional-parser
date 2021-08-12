@@ -1,8 +1,8 @@
-module JsonParser (parse, json) where
+module JsonParser (parse, jsonValue, parseJsonFile) where
 
 import Control.Applicative (Alternative (..), optional)
 import Data.Foldable (asum)
-import Parser (Parser (..), anyChar, char, integer, parse, satisfy, spaces, string)
+import Parser (Parser (..), anyChar, char, integer, parse, satisfy, spaces, string, parseFile)
 import System.IO (NewlineMode (inputNL))
 import System.Posix.DynamicLinker.ByteString (DL (Next))
 
@@ -28,9 +28,9 @@ jsonBool = jsonTrue <|> jsonFalse
 
 -- Parse JSON string
 stringInQuote :: Parser String
-stringInQuote = between (char '"') (char '"') (many jsonCharacter)
+stringInQuote = between (char '"') (char '"') jsonCharacters
   where
-    jsonCharacter = anyChar `satisfy` ('"' /=)
+    jsonCharacters = many (anyChar `satisfy` ('"' /=))
 
 jsonString :: Parser JsonValue
 jsonString = JsonString <$> stringInQuote
@@ -45,7 +45,7 @@ jsonValue = jsonNull <|> jsonBool <|> jsonString <|> jsonNumber <|> jsonArray <|
 
 -- Parse JSON array
 jsonElement :: Parser JsonValue
-jsonElement = between spaces spaces jsonElement
+jsonElement = between spaces spaces jsonValue
 
 array :: Parser [JsonValue]
 array = between (char '[') (char ']') (jsonElements <|> [] <$ spaces)
@@ -61,9 +61,7 @@ key = between spaces spaces stringInQuote
 
 member :: Parser (String, JsonValue)
 member = do
-  _ <- spaces
   k <- key
-  _ <- spaces
   _ <- char ':'
   v <- jsonElement
   pure (k, v)
@@ -93,5 +91,5 @@ separateBy pa pb = do
     (Just a, _) -> pure [a]
     _ -> empty
 
-json :: Parser JsonValue
-json = between spaces spaces jsonValue
+parseJsonFile :: FilePath -> IO (Maybe JsonValue)
+parseJsonFile = parseFile jsonValue

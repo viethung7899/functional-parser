@@ -87,3 +87,10 @@ satisfy (Parser pa) predicate = Parser $ \input -> do
   (a, rest) <- pa input
   guard $ predicate a
   Just (a, rest)
+
+
+-- Parse a file
+parseFile :: Parser a -> FilePath -> IO (Maybe a)
+parseFile parser filename = do
+  input <- readFile filename
+  return (fst <$> parse parser input)
