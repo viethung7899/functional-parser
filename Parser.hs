@@ -1,13 +1,14 @@
 module Parser where
-import Control.Applicative (Alternative(..), empty, (<|>))
-import System.IO (NewlineMode(inputNL))
+
+import Control.Applicative (Alternative (..), empty, (<|>))
 import Control.Monad (guard)
 import Data.Foldable (asum)
+import System.IO (NewlineMode (inputNL))
 
 -- DEFINITION of Parser
-newtype Parser a = Parser {
-  parse :: String -> Maybe (a, String)
-}
+newtype Parser a = Parser
+  { parse :: String -> Maybe (a, String)
+  }
 
 -- ESTABLISH property
 -- A parser need to be a functor to transform map data
@@ -43,24 +44,25 @@ instance Alternative Parser where
 -- PARSING TEXT
 -- Parse any character
 anyChar :: Parser Char
-anyChar = Parser pChar where
-  pChar [] = Nothing
-  pChar (x:xs) = Just (x, xs)
+anyChar = Parser pChar
+  where
+    pChar [] = Nothing
+    pChar (x : xs) = Just (x, xs)
 
 -- Parse a character
 char :: Char -> Parser Char
 char c = anyChar `satisfy` (c ==)
 
 -- Parse a string
-string :: String -> Parser String
-string = mapM char
 -- A bit magical in this part
 --- mapM :: (Traversible t, Monad m) => (a -> m b) -> t a -> m (t b)
 --- this functiion perform monadic operation from left to right, and collect the result
 --- If t is the list container (or []), m is the Parser, then mapM becomes, a and b are both char
 ----- mapM signaturer becomes (Char -> Parser Char) -> [Char] -> Parser [Char]
+string :: String -> Parser String
+string = mapM char
 
--- Parse a whitespace
+-- Parse a whitespaces
 space :: Parser Char
 space = asum [char ' ', char '\n', char '\t', char '\r']
 
@@ -69,7 +71,7 @@ spaces = many space
 
 -- Parse number
 digit :: Parser Integer
-digit = asum $ (\(num, c) -> num <$ char c) <$> zip [0..9] ['0'..'9']
+digit = asum $ (\(num, c) -> num <$ char c) <$> zip [0 .. 9] ['0' .. '9']
 
 -- Parse an unsigned integer
 unsignedInt :: Parser Integer
@@ -85,6 +87,3 @@ satisfy (Parser pa) predicate = Parser $ \input -> do
   (a, rest) <- pa input
   guard $ predicate a
   Just (a, rest)
-
--- Parse between commas
-betweenCommas = undefined 

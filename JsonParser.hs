@@ -1,13 +1,13 @@
 module JsonParser (parse, json) where
 
-import Control.Applicative ( Alternative(..), optional )
-import Parser ( Parser(..), parse, char, anyChar, string, integer, satisfy, spaces )
+import Control.Applicative (Alternative (..), optional)
 import Data.Foldable (asum)
-import System.IO (NewlineMode(inputNL))
-import System.Posix.DynamicLinker.ByteString (DL(Next))
+import Parser (Parser (..), anyChar, char, integer, parse, satisfy, spaces, string)
+import System.IO (NewlineMode (inputNL))
+import System.Posix.DynamicLinker.ByteString (DL (Next))
 
-data JsonValue =
-  JsonNull
+data JsonValue
+  = JsonNull
   | JsonBool Bool
   | JsonString String
   | JsonNumber Integer
@@ -15,29 +15,29 @@ data JsonValue =
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
 
-
 -- Parse null value
 jsonNull :: Parser JsonValue
 jsonNull = JsonNull <$ string "null"
 
 -- Parse boolean values
 jsonBool :: Parser JsonValue
-jsonBool = jsonTrue <|> jsonFalse where
-  jsonTrue = JsonBool True <$ string "true"
-  jsonFalse = JsonBool False <$ string "false"
+jsonBool = jsonTrue <|> jsonFalse
+  where
+    jsonTrue = JsonBool True <$ string "true"
+    jsonFalse = JsonBool False <$ string "false"
 
 -- Parse JSON string
-token :: Parser String
-token = between (many jsonCharacter) (char '"') (char '"')
-  where jsonCharacter = anyChar `satisfy` ('"' /=)
+stringInQuote :: Parser String
+stringInQuote = between (char '"') (char '"') (many jsonCharacter)
+  where
+    jsonCharacter = anyChar `satisfy` ('"' /=)
 
 jsonString :: Parser JsonValue
-jsonString = JsonString <$> token
+jsonString = JsonString <$> stringInQuote
 
 -- Parse JSON number
 jsonNumber :: Parser JsonValue
 jsonNumber = JsonNumber <$> integer
-
 
 -- Parse JSON value
 jsonValue :: Parser JsonValue
@@ -45,58 +45,53 @@ jsonValue = jsonNull <|> jsonBool <|> jsonString <|> jsonNumber <|> jsonArray <|
 
 -- Parse JSON array
 jsonElement :: Parser JsonValue
-jsonElement = between jsonValue spaces spaces
+jsonElement = between spaces spaces jsonElement
 
 array :: Parser [JsonValue]
-array = between jsonElements (char '[') (char ']') where
-  jsonElements = jsonElement `separateBy` char ','
+array = between (char '[') (char ']') (jsonElements <|> [] <$ spaces)
+  where
+    jsonElements = jsonElement `separateBy` char ','
 
 jsonArray :: Parser JsonValue
-jsonArray = JsonArray <$> (array <|> emptyArray)
-
-emptyArray :: Parser [JsonValue]
-emptyArray =  between ([] <$ spaces) (char '[') (char ']')
+jsonArray = JsonArray <$> array
 
 -- Parse JSON object
 key :: Parser String
-key = between token spaces spaces
+key = between spaces spaces stringInQuote
 
 member :: Parser (String, JsonValue)
 member = do
+  _ <- spaces
   k <- key
+  _ <- spaces
   _ <- char ':'
   v <- jsonElement
-  pure (k,v)
+  pure (k, v)
 
 members :: Parser [(String, JsonValue)]
 members = member `separateBy` char ','
 
-emptyObject :: Parser [(String, JsonValue)]
-emptyObject = between ([] <$ spaces) (char '{') (char '}')
-
 object :: Parser [(String, JsonValue)]
-object = between members (char '{') (char '}')
+object = between (char '{') (char '}') (members <|> ([] <$ spaces))
 
 jsonObject :: Parser JsonValue
-jsonObject = JsonObject <$> (emptyObject <|> object)
-
+jsonObject = JsonObject <$> object
 
 -- Parsing between enclosure "", (), []
-between :: Parser a -> Parser b -> Parser c -> Parser a
-between mid left right = left *> mid <* right
+between :: Parser a -> Parser b -> Parser c -> Parser c
+between left right middle = left *> middle <* right
 
 -- Parsing a, a, a, a, a, ...
 separateBy :: Parser a -> Parser b -> Parser [a]
-separateBy pa delimeter = do
+separateBy pa pb = do
   ma <- optional pa
-  md <- optional delimeter
-  case (ma, md) of
+  mb <- optional pb
+  case (ma, mb) of
     (Just a, Just d) -> do
-      as <- pa `separateBy` delimeter
-      pure (a:as)
+      as <- pa `separateBy` pb
+      pure (a : as)
     (Just a, _) -> pure [a]
     _ -> empty
 
-
 json :: Parser JsonValue
-json = between jsonValue spaces spaces
+json = between spaces spaces jsonValue
