@@ -1,7 +1,10 @@
 module JsonParser (parse, jsonValue, parseJsonFile) where
 
 import Control.Applicative (Alternative (..), optional)
+import Control.Monad
 import Data.Foldable (asum)
+import Data.Char
+import Numeric
 import Parser (Parser (..), anyChar, char, digit, integer, parse, satisfy, spaces, string, parseFile, unsignedInt, zeroLeadingInt)
 import System.IO (NewlineMode (inputNL))
 import System.Posix.DynamicLinker.ByteString (DL (Next))
@@ -16,51 +19,61 @@ data JsonValue
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
 
--- Parse null value
+-- Null value
 jsonNull :: Parser JsonValue
 jsonNull = JsonNull <$ string "null"
 
--- Parse boolean values
+-- Boolean values
 jsonBool :: Parser JsonValue
 jsonBool = jsonTrue <|> jsonFalse
   where
     jsonTrue = JsonBool True <$ string "true"
     jsonFalse = JsonBool False <$ string "false"
 
--- Parse JSON string
-stringInQuote :: Parser String
-stringInQuote = between (char '"') (char '"') jsonCharacters
+-- JSON string
+escapeChar :: Parser Char
+escapeChar = asum $ readEscapeChar <$>
+  zip ['"', '\\', '/', '\b', '\f', '\n', '\r', '\t']
+      ['"', '\\', '/', 'b', 'f', 'n', 'r', 't']
+  where readEscapeChar (c, s) = c <$ char s
+
+unicode :: Parser Char
+unicode = string "u" *> (chr . fst . head . readHex <$> replicateM 4 (anyChar `satisfy` isHexDigit))
+
+escape :: Parser Char
+escape = char '\\' *> (unicode <|> escapeChar)
+
+anyExtChar :: Parser Char
+anyExtChar = (anyChar `satisfy` ((&&) <$> (/= '"') <*> (/= '\\'))) <|> escape
+
+stringLiteral :: Parser String
+stringLiteral = between (char '"') (char '"') jsonCharacters
   where
-    jsonCharacters = many (anyChar `satisfy` ('"' /=))
+    jsonCharacters = many (anyExtChar `satisfy` ('"' /=))
 
 jsonString :: Parser JsonValue
-jsonString = JsonString <$> stringInQuote
+jsonString = JsonString <$> stringLiteral
 
--- Parse JSON number
-jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber <$> number
-
+-- JSON number
 fraction :: Parser Rational
 fraction = char '.' *> (foldr (\n d -> (n + d) / 10) 0 <$> some (toRational <$> digit))
-  <|> 0 <$ string ""
+  <|> pure 0
 
 expo :: Parser Integer
 expo = do
   _ <- char 'e' <|> char 'E'
-  positive <- optional ((== '+') <$> (char '+' <|> char '-'))
-  i <- zeroLeadingInt
-  case positive of
-    Just True -> pure i
-    Just False -> pure (- i)
-    _ -> empty
-  <|> 0 <$ string ""
+  sign <- 1 <$ char '+' <|> (-1) <$ char '-'
+  val <- zeroLeadingInt
+  pure (sign * val)
+  <|> pure 0
 
 number :: Parser Rational
-number = do
-  i <- integer
-  f <- fraction
-  e <- expo
-  pure ((toRational i + f) * (10 ^^ e))
+number =
+  formFraction <$> integer <*> fraction <*> expo
+  where formFraction i f e = (fromIntegral i + f) * (10 ^^ e)
+
+jsonNumber :: Parser JsonValue
+jsonNumber = JsonNumber <$> undefined
 
 -- Parse JSON value
 jsonValue :: Parser JsonValue
@@ -80,7 +93,7 @@ jsonArray = JsonArray <$> array
 
 -- Parse JSON object
 key :: Parser String
-key = between spaces spaces stringInQuote
+key = between spaces spaces stringLiteral
 
 member :: Parser (String, JsonValue)
 member = do
