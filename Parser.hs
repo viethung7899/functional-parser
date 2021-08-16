@@ -4,6 +4,7 @@ import Control.Applicative (Alternative (..), empty, (<|>))
 import Control.Monad (guard)
 import Data.Foldable (asum)
 import System.IO (NewlineMode (inputNL))
+import Data.Char
 
 -- DEFINITION of Parser
 newtype Parser a = Parser
@@ -69,35 +70,9 @@ space = asum [char ' ', char '\n', char '\t', char '\r']
 spaces :: Parser String
 spaces = many space
 
--- Parse number
-digit :: Parser Integer
-digit = zero <|> onenine
-
-onenine :: Parser Integer
-onenine = asum $ (\(num, c) -> num <$ char c) <$> zip [1 .. 9] ['1' .. '9']
-
-zero :: Parser Integer
-zero = 0 <$ char '0'
-
--- Parse an unsigned integer
-singleDigit :: Parser [Integer]
-singleDigit = (: []) <$> digit
-
-multipleDigits :: Parser [Integer]
-multipleDigits = do
-  first <- onenine
-  rest <- some digit
-  pure (first : rest)
-
-unsignedInt :: Parser Integer
-unsignedInt = foldl (\n d -> n * 10 + d) 0 <$> (multipleDigits <|> singleDigit)
-
-zeroLeadingInt :: Parser Integer
-zeroLeadingInt = foldl (\n d -> n * 10 + d) 0 <$> some digit
-
--- Parse an interger
-integer :: Parser Integer
-integer = negate <$> (char '-' *> unsignedInt) <|> unsignedInt
+-- Parse digit
+digit :: Parser Char
+digit = anyChar `satisfy` isDigit
 
 -- Stop the parser when condition is met
 satisfy :: Parser a -> (a -> Bool) -> Parser a

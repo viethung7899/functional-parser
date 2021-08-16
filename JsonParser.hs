@@ -1,11 +1,11 @@
 module JsonParser (parse, jsonValue, parseJsonFile) where
 
 import Control.Applicative (Alternative (..), optional)
-import Control.Monad
+import Control.Monad ( guard, replicateM )
 import Data.Foldable (asum)
-import Data.Char
-import Numeric
-import Parser (Parser (..), anyChar, char, digit, integer, parse, satisfy, spaces, string, parseFile, unsignedInt, zeroLeadingInt)
+import Data.Char ( chr, isHexDigit )
+import Numeric ( readHex )
+import Parser (Parser (..), anyChar, char, digit, parse, satisfy, spaces, string, parseFile)
 import System.IO (NewlineMode (inputNL))
 import System.Posix.DynamicLinker.ByteString (DL (Next))
 import GHC.Float (divideDouble)
@@ -14,7 +14,7 @@ data JsonValue
   = JsonNull
   | JsonBool Bool
   | JsonString String
-  | JsonNumber Rational
+  | JsonNumber Double
   | JsonArray [JsonValue]
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
@@ -55,25 +55,36 @@ jsonString :: Parser JsonValue
 jsonString = JsonString <$> stringLiteral
 
 -- JSON number
-fraction :: Parser Rational
-fraction = char '.' *> (foldr (\n d -> (n + d) / 10) 0 <$> some (toRational <$> digit))
-  <|> pure 0
+jsonNumber :: Parser JsonValue
+jsonNumber = JsonNumber <$> number
+
+noLeadingZero :: Parser [Char]
+noLeadingZero = do
+  first <- digit
+  guard (first /= '0')
+  rest <- some digit
+  pure (first : rest)
+
+integer :: Parser Integer
+integer = read <$> (noLeadingZero <|> (: []) <$> digit)
+
+fraction :: Parser Double
+fraction = read <$> (('0':) <$> ((:) <$> char '.' <*> some digit))
 
 expo :: Parser Integer
 expo = do
   _ <- char 'e' <|> char 'E'
   sign <- 1 <$ char '+' <|> (-1) <$ char '-'
-  val <- zeroLeadingInt
+  val <- read <$> some digit
   pure (sign * val)
-  <|> pure 0
 
-number :: Parser Rational
-number =
-  formFraction <$> integer <*> fraction <*> expo
-  where formFraction i f e = (fromIntegral i + f) * (10 ^^ e)
-
-jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber <$> undefined
+number :: Parser Double
+number = do
+  s <- (-1) <$ char '-' <|> pure 1
+  i <- integer
+  f <- fraction <|> pure 0
+  e <- expo <|> pure 0
+  pure (fromIntegral s * (fromIntegral i + f) * (10 ^^ e))
 
 -- Parse JSON value
 jsonValue :: Parser JsonValue
