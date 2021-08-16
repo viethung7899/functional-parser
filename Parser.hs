@@ -71,11 +71,29 @@ spaces = many space
 
 -- Parse number
 digit :: Parser Integer
-digit = asum $ (\(num, c) -> num <$ char c) <$> zip [0 .. 9] ['0' .. '9']
+digit = zero <|> onenine
+
+onenine :: Parser Integer
+onenine = asum $ (\(num, c) -> num <$ char c) <$> zip [1 .. 9] ['1' .. '9']
+
+zero :: Parser Integer
+zero = 0 <$ char '0'
 
 -- Parse an unsigned integer
+singleDigit :: Parser [Integer]
+singleDigit = (: []) <$> digit
+
+multipleDigits :: Parser [Integer]
+multipleDigits = do
+  first <- onenine
+  rest <- some digit
+  pure (first : rest)
+
 unsignedInt :: Parser Integer
-unsignedInt = foldl (\n d -> n * 10 + d) 0 <$> some digit
+unsignedInt = foldl (\n d -> n * 10 + d) 0 <$> (multipleDigits <|> singleDigit)
+
+zeroLeadingInt :: Parser Integer
+zeroLeadingInt = foldl (\n d -> n * 10 + d) 0 <$> some digit
 
 -- Parse an interger
 integer :: Parser Integer
@@ -87,7 +105,6 @@ satisfy (Parser pa) predicate = Parser $ \input -> do
   (a, rest) <- pa input
   guard $ predicate a
   Just (a, rest)
-
 
 -- Parse a file
 parseFile :: Parser a -> FilePath -> IO (Maybe a)

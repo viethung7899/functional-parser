@@ -2,15 +2,16 @@ module JsonParser (parse, jsonValue, parseJsonFile) where
 
 import Control.Applicative (Alternative (..), optional)
 import Data.Foldable (asum)
-import Parser (Parser (..), anyChar, char, integer, parse, satisfy, spaces, string, parseFile)
+import Parser (Parser (..), anyChar, char, digit, integer, parse, satisfy, spaces, string, parseFile, unsignedInt, zeroLeadingInt)
 import System.IO (NewlineMode (inputNL))
 import System.Posix.DynamicLinker.ByteString (DL (Next))
+import GHC.Float (divideDouble)
 
 data JsonValue
   = JsonNull
   | JsonBool Bool
   | JsonString String
-  | JsonNumber Integer
+  | JsonNumber Rational
   | JsonArray [JsonValue]
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
@@ -37,7 +38,29 @@ jsonString = JsonString <$> stringInQuote
 
 -- Parse JSON number
 jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber <$> integer
+jsonNumber = JsonNumber <$> number
+
+fraction :: Parser Rational
+fraction = char '.' *> (foldr (\n d -> (n + d) / 10) 0 <$> some (toRational <$> digit))
+  <|> 0 <$ string ""
+
+expo :: Parser Integer
+expo = do
+  _ <- char 'e' <|> char 'E'
+  positive <- optional ((== '+') <$> (char '+' <|> char '-'))
+  i <- zeroLeadingInt
+  case positive of
+    Just True -> pure i
+    Just False -> pure (- i)
+    _ -> empty
+  <|> 0 <$ string ""
+
+number :: Parser Rational
+number = do
+  i <- integer
+  f <- fraction
+  e <- expo
+  pure ((toRational i + f) * (10 ^^ e))
 
 -- Parse JSON value
 jsonValue :: Parser JsonValue
@@ -70,7 +93,7 @@ members :: Parser [(String, JsonValue)]
 members = member `separateBy` char ','
 
 object :: Parser [(String, JsonValue)]
-object = between (char '{') (char '}') (members <|> ([] <$ spaces))
+object = between (char '{') (char '}') (members <|> [] <$ spaces)
 
 jsonObject :: Parser JsonValue
 jsonObject = JsonObject <$> object
