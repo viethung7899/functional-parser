@@ -1,0 +1,4 @@
+{
+       "hello": [false, true, null, 42, "foo\n\u1234\"", [1, -2, 3.1415, 4e-6, 5E6, 0.123e+1]],
+       "world": null
+  }

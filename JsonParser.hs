@@ -143,15 +143,7 @@ between left right middle = left *> middle <* right
 
 -- Parsing a, a, a, a, a, ...
 separateBy :: Parser a -> Parser b -> Parser [a]
-separateBy pa pb = do
-  ma <- optional pa
-  mb <- optional pb
-  case (ma, mb) of
-    (Just a, Just d) -> do
-      as <- pa `separateBy` pb
-      pure (a : as)
-    (Just a, _) -> pure [a]
-    _ -> empty
+separateBy element separator = (:) <$> element <*> many (separator *> element) <|> pure []
 
 -- Parse JSON from a file
 parseJsonFile :: FilePath -> IO (Either ParserError JsonValue)
