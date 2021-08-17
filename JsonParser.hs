@@ -5,7 +5,17 @@ import Control.Monad (guard, replicateM)
 import Data.Char (chr, isHexDigit)
 import Data.Foldable (asum)
 import Numeric (readHex)
-import Parser (Parser (..), anyChar, char, digit, parse, parseFile, satisfy, spaces, string)
+import Parser
+  ( Parser (parse),
+    ParserError,
+    anyChar,
+    char,
+    digit,
+    parseFile,
+    parseIf,
+    spaces,
+    string,
+  )
 
 data JsonValue
   = JsonNull
@@ -16,7 +26,7 @@ data JsonValue
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
 
--- || Parse JSON value
+-- Parse JSON value
 jsonValue :: Parser JsonValue
 jsonValue = jsonNull <|> jsonBool <|> jsonString <|> jsonNumber <|> jsonArray <|> jsonObject
 
@@ -39,13 +49,13 @@ stringLiteral :: Parser String
 stringLiteral = between (char '"') (char '"') (many extChar)
 
 extChar :: Parser Char
-extChar = (anyChar `satisfy` ((&&) <$> (/= '"') <*> (/= '\\'))) <|> escape
+extChar = parseIf anyChar "normal character" ((&&) <$> (/= '"') <*> (/= '\\')) <|> escape
 
 escape :: Parser Char
 escape = char '\\' *> (unicode <|> escapeChar)
 
 unicode :: Parser Char
-unicode = string "u" *> (chr . fst . head . readHex <$> replicateM 4 (anyChar `satisfy` isHexDigit))
+unicode = string "u" *> (chr . fst . head . readHex <$> replicateM 4 (parseIf anyChar "hex character" isHexDigit))
 
 escapeChar :: Parser Char
 escapeChar =
@@ -144,5 +154,5 @@ separateBy pa pb = do
     _ -> empty
 
 -- Parse JSON from a file
-parseJsonFile :: FilePath -> IO (Maybe JsonValue)
+parseJsonFile :: FilePath -> IO (Either ParserError JsonValue)
 parseJsonFile = parseFile jsonValue

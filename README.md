@@ -44,6 +44,6 @@ Just (JsonObject [("hello",JsonNumber 123),("foo",JsonString "bar bar")],"  gssg
 
 - [x] Add `IO`
 - [x] Parse floating numbers for JSON
-- [ ] Implement `error`
+- [X] Implement `ParserError`
 - [ ] More parser such as HTML, CSS, math expression
 - [ ] Add test
