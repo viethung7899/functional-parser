@@ -31,6 +31,8 @@ Just ("foo","bar")
 
 A parser spacialized for JSON string
 
+The grammar of JSON can be found [here](https://www.json.org/json-en.html)
+
 #### Example
 
 ```ghci
@@ -40,7 +42,8 @@ Just (JsonObject [("hello",JsonNumber 123),("foo",JsonString "bar bar")],"  gssg
 
 ## To-do
 
-- [ ] Implement `error`
 - [x] Add `IO`
+- [x] Parse floating numbers for JSON
+- [ ] Implement `error`
 - [ ] More parser such as HTML, CSS, math expression
-- [x] Parse floating numbers
+- [ ] Add test

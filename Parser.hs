@@ -2,9 +2,8 @@ module Parser where
 
 import Control.Applicative (Alternative (..), empty, (<|>))
 import Control.Monad (guard)
+import Data.Char (isDigit)
 import Data.Foldable (asum)
-import System.IO (NewlineMode (inputNL))
-import Data.Char
 
 -- DEFINITION of Parser
 newtype Parser a = Parser
@@ -64,8 +63,9 @@ string :: String -> Parser String
 string = mapM char
 
 -- Parse a whitespaces
+-- space = asum [char ' ', char '\n', char '\t', char '\r']
 space :: Parser Char
-space = asum [char ' ', char '\n', char '\t', char '\r']
+space = asum $ map char [' ', '\n', '\t', '\r']
 
 spaces :: Parser String
 spaces = many space
@@ -76,13 +76,13 @@ digit = anyChar `satisfy` isDigit
 
 -- Stop the parser when condition is met
 satisfy :: Parser a -> (a -> Bool) -> Parser a
-satisfy (Parser pa) predicate = Parser $ \input -> do
-  (a, rest) <- pa input
+satisfy pa predicate = do
+  a <- pa
   guard $ predicate a
-  Just (a, rest)
+  pure a
 
 -- Parse a file
 parseFile :: Parser a -> FilePath -> IO (Maybe a)
 parseFile parser filename = do
   input <- readFile filename
-  return (fst <$> parse parser input)
+  return $ fst <$> parse parser input

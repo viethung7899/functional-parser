@@ -1,14 +1,11 @@
 module JsonParser (parse, jsonValue, parseJsonFile) where
 
 import Control.Applicative (Alternative (..), optional)
-import Control.Monad ( guard, replicateM )
+import Control.Monad (guard, replicateM)
+import Data.Char (chr, isHexDigit)
 import Data.Foldable (asum)
-import Data.Char ( chr, isHexDigit )
-import Numeric ( readHex )
-import Parser (Parser (..), anyChar, char, digit, parse, satisfy, spaces, string, parseFile)
-import System.IO (NewlineMode (inputNL))
-import System.Posix.DynamicLinker.ByteString (DL (Next))
-import GHC.Float (divideDouble)
+import Numeric (readHex)
+import Parser (Parser (..), anyChar, char, digit, parse, parseFile, satisfy, spaces, string)
 
 data JsonValue
   = JsonNull
@@ -18,6 +15,10 @@ data JsonValue
   | JsonArray [JsonValue]
   | JsonObject [(String, JsonValue)]
   deriving (Show, Eq)
+
+-- || Parse JSON value
+jsonValue :: Parser JsonValue
+jsonValue = jsonNull <|> jsonBool <|> jsonString <|> jsonNumber <|> jsonArray <|> jsonObject
 
 -- Null value
 jsonNull :: Parser JsonValue
@@ -31,32 +32,55 @@ jsonBool = jsonTrue <|> jsonFalse
     jsonFalse = JsonBool False <$ string "false"
 
 -- JSON string
-escapeChar :: Parser Char
-escapeChar = asum $ readEscapeChar <$>
-  zip ['"', '\\', '/', '\b', '\f', '\n', '\r', '\t']
-      ['"', '\\', '/', 'b', 'f', 'n', 'r', 't']
-  where readEscapeChar (c, s) = c <$ char s
+jsonString :: Parser JsonValue
+jsonString = JsonString <$> stringLiteral
 
-unicode :: Parser Char
-unicode = string "u" *> (chr . fst . head . readHex <$> replicateM 4 (anyChar `satisfy` isHexDigit))
+stringLiteral :: Parser String
+stringLiteral = between (char '"') (char '"') (many extChar)
+
+extChar :: Parser Char
+extChar = (anyChar `satisfy` ((&&) <$> (/= '"') <*> (/= '\\'))) <|> escape
 
 escape :: Parser Char
 escape = char '\\' *> (unicode <|> escapeChar)
 
-anyExtChar :: Parser Char
-anyExtChar = (anyChar `satisfy` ((&&) <$> (/= '"') <*> (/= '\\'))) <|> escape
+unicode :: Parser Char
+unicode = string "u" *> (chr . fst . head . readHex <$> replicateM 4 (anyChar `satisfy` isHexDigit))
 
-stringLiteral :: Parser String
-stringLiteral = between (char '"') (char '"') jsonCharacters
+escapeChar :: Parser Char
+escapeChar =
+  asum $
+    readEscapeChar
+      <$> zip
+        ['"', '\\', '/', '\b', '\f', '\n', '\r', '\t']
+        ['"', '\\', '/', 'b', 'f', 'n', 'r', 't']
   where
-    jsonCharacters = many (anyExtChar `satisfy` ('"' /=))
-
-jsonString :: Parser JsonValue
-jsonString = JsonString <$> stringLiteral
+    readEscapeChar (c, s) = c <$ char s
 
 -- JSON number
 jsonNumber :: Parser JsonValue
 jsonNumber = JsonNumber <$> number
+
+number :: Parser Double
+number = do
+  s <- minus <|> pure 1
+  i <- integer
+  f <- fraction <|> pure 0
+  e <- expo <|> pure 0
+  pure (fromIntegral s * (fromIntegral i + f) * (10 ^^ e))
+
+integer :: Parser Integer
+integer = read <$> (noLeadingZero <|> (: []) <$> digit)
+
+fraction :: Parser Double
+fraction = read . ('0' :) <$> ((:) <$> char '.' <*> some digit)
+
+expo :: Parser Integer
+expo = do
+  _ <- char 'e' <|> char 'E'
+  sign <- plus <|> minus <|> pure 1
+  val <- read <$> some digit
+  pure (sign * val)
 
 noLeadingZero :: Parser [Char]
 noLeadingZero = do
@@ -65,46 +89,33 @@ noLeadingZero = do
   rest <- some digit
   pure (first : rest)
 
-integer :: Parser Integer
-integer = read <$> (noLeadingZero <|> (: []) <$> digit)
+plus :: Parser Integer
+plus = 1 <$ char '+'
 
-fraction :: Parser Double
-fraction = read <$> (('0':) <$> ((:) <$> char '.' <*> some digit))
-
-expo :: Parser Integer
-expo = do
-  _ <- char 'e' <|> char 'E'
-  sign <- 1 <$ char '+' <|> (-1) <$ char '-'
-  val <- read <$> some digit
-  pure (sign * val)
-
-number :: Parser Double
-number = do
-  s <- (-1) <$ char '-' <|> pure 1
-  i <- integer
-  f <- fraction <|> pure 0
-  e <- expo <|> pure 0
-  pure (fromIntegral s * (fromIntegral i + f) * (10 ^^ e))
-
--- Parse JSON value
-jsonValue :: Parser JsonValue
-jsonValue = jsonNull <|> jsonBool <|> jsonString <|> jsonNumber <|> jsonArray <|> jsonObject
+minus :: Parser Integer
+minus = (-1) <$ char '-'
 
 -- Parse JSON array
-jsonElement :: Parser JsonValue
-jsonElement = between spaces spaces jsonValue
+jsonArray :: Parser JsonValue
+jsonArray = JsonArray <$> array
 
 array :: Parser [JsonValue]
 array = between (char '[') (char ']') (jsonElements <|> [] <$ spaces)
   where
     jsonElements = jsonElement `separateBy` char ','
 
-jsonArray :: Parser JsonValue
-jsonArray = JsonArray <$> array
+jsonElement :: Parser JsonValue
+jsonElement = between spaces spaces jsonValue
 
 -- Parse JSON object
-key :: Parser String
-key = between spaces spaces stringLiteral
+jsonObject :: Parser JsonValue
+jsonObject = JsonObject <$> object
+
+object :: Parser [(String, JsonValue)]
+object = between (char '{') (char '}') (members <|> [] <$ spaces)
+
+members :: Parser [(String, JsonValue)]
+members = member `separateBy` char ','
 
 member :: Parser (String, JsonValue)
 member = do
@@ -113,14 +124,8 @@ member = do
   v <- jsonElement
   pure (k, v)
 
-members :: Parser [(String, JsonValue)]
-members = member `separateBy` char ','
-
-object :: Parser [(String, JsonValue)]
-object = between (char '{') (char '}') (members <|> [] <$ spaces)
-
-jsonObject :: Parser JsonValue
-jsonObject = JsonObject <$> object
+key :: Parser String
+key = between spaces spaces stringLiteral
 
 -- Parsing between enclosure "", (), []
 between :: Parser a -> Parser b -> Parser c -> Parser c
@@ -138,5 +143,6 @@ separateBy pa pb = do
     (Just a, _) -> pure [a]
     _ -> empty
 
+-- Parse JSON from a file
 parseJsonFile :: FilePath -> IO (Maybe JsonValue)
 parseJsonFile = parseFile jsonValue
