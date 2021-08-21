@@ -14,7 +14,7 @@ import Parser
     spaces,
     string,
   )
-import Test.Hspec (describe, hspec, it)
+import Test.Hspec (describe, hspec, it, shouldSatisfy)
 import Test.QuickCheck
   ( Arbitrary (arbitrary),
     Gen,
@@ -33,7 +33,8 @@ import TestUtil
     checkRemainInput,
     checkResult,
     parseInput,
-    nonEmptyString
+    nonEmptyString,
+    parseEmptyString
   )
 
 main :: IO ()
@@ -43,7 +44,7 @@ main = hspec $ do
       it "parse on non-empty string" $ do
         property $ forAll nonEmptyString (isRight . parse anyChar . makeInput)
       it "parse on empty string" $ do
-        property $ parseEmptyString anyChar
+        parseEmptyString anyChar
     describe "character" $ do
       it "parse matching characters" $ do
         property testMatchingCharacter
@@ -60,14 +61,14 @@ main = hspec $ do
         property testMismatchingString
     describe "digit" $ do
       it "parse on empty string" $ do
-        property $ parseEmptyString digit
+        parseEmptyString digit
       it "parse on non-empty string starts with digit character" $ do
         property testOnStringWithDigit
       it "parse on non-empty string starts with non-digit character" $ do
         property testOnStringWithoutDigit
     describe "space" $ do
       it "parse space on empty string" $ do
-        property $ parseEmptyString space
+        parseEmptyString space
       it "parse one space on the string without spaces" $ do
         property testSpaceOnStringWithoutSpaces
       it "parse multiple spaces on the string without spaces" $ do
@@ -76,8 +77,7 @@ main = hspec $ do
         property testSpacesOnStringWithSpaces
 
 -- | | Testing function definitions
-parseEmptyString :: Parser a -> Bool
-parseEmptyString p = isLeft $ parse p (makeInput "")
+
 
 -- Parse characters
 testMatchingCharacter :: Char -> String -> Bool

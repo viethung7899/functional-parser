@@ -2,7 +2,7 @@ module JsonParser where
 
 import Control.Applicative (Alternative (..), optional)
 import Control.Monad (guard, replicateM)
-import Data.Char (chr, isHexDigit)
+import Data.Char (chr, isHexDigit, ord)
 import Data.Foldable (asum)
 import Numeric (readHex)
 import Parser
@@ -39,7 +39,10 @@ stringLiteral :: Parser String
 stringLiteral = between (char '"') (char '"') (many extChar)
 
 extChar :: Parser Char
-extChar = parseIf anyChar "normal character" ((&&) <$> (/= '"') <*> (/= '\\')) <|> escape
+extChar = parseIf anyChar "normal character" isValidChar <|> escape
+
+isValidChar :: Char -> Bool
+isValidChar c = c /= '"' && c /= '\\' && ord c >= 32 && ord c <= 69631
 
 escape :: Parser Char
 escape = char '\\' *> (unicode <|> escapeChar)

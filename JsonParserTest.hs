@@ -1,5 +1,6 @@
 module JsonParserTest where
 
+import Data.Bifunctor
 import Data.Char
 import Data.Either
 import Data.List.NonEmpty (nonEmpty)
@@ -35,6 +36,13 @@ main = hspec $ do
         property testNoHexCode
       it "fails when '\\' does not follow the hex code or escape code" $ do
         property testNoEscapeCode
+    describe "srting" $ do
+      it "fails when parse empty string" $ do
+        parseEmptyString jsonString
+      it "always parse character from string quotes and correct format" $ do
+        property testValidStringLiteral
+      it "always parse character from string without quotes" $ do
+        property testStringNoQuote
 
 ------ Test functions
 ---- Boolean
@@ -56,6 +64,7 @@ randomUnicode = do
   let c = (chr . fst . head . readHex) hex
   return (c, 'u' : hex)
 
+-- Escape
 randomSpecialEscape :: Gen (Char, String)
 randomSpecialEscape =
   elements
@@ -87,3 +96,23 @@ testNoEscapeCode :: Property
 testNoEscapeCode = forAll nonEscape $ \s -> isLeft (parseInput escape ('\\' : s))
   where
     nonEscape = nonEmptyString `suchThat` (\s -> head s `notElem` ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'])
+
+-- String Literal
+testValidStringLiteral :: Property
+testValidStringLiteral = forAll validString $ \(s, sl) -> checkResult (parseInput jsonString ("\"" ++ sl ++ "\"")) (JsonString s) ""
+
+testStringNoQuote :: Property
+testStringNoQuote = forAll validString $ \(_, sl) -> parseInput jsonString sl `shouldSatisfy` isLeft
+
+validNormalChar :: Gen (Char, String)
+validNormalChar = (\c -> (c, [c])) <$> arbitrary `suchThat` isValidChar
+
+validEsapce :: Gen (Char, String)
+validEsapce = second ('\\' :) <$> randomEscape
+
+validString :: Gen (String, String)
+validString = foldr (\(c, s) (str, strLit) -> (c : str, s ++ strLit)) ([], []) <$> listOf (oneof [validEsapce, validNormalChar])
+
+-- Number
+validNumber :: Gen (Double, String)
+validNumber = undefined
