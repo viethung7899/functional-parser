@@ -58,8 +58,8 @@ instance Monad Parser where
 -- Implement Alternative to perform switch control
 instance Alternative (Either ParserError) where
   empty = Left $ ParserError (1, 1) "empty"
-  Left _ <|> e = e
-  e <|> _ = e
+  Left _ <|> e2 = e2
+  e1 <|> _ = e1
 
 instance Alternative Parser where
   empty = Parser $ const empty

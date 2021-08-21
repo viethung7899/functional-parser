@@ -6,16 +6,6 @@ import Data.Char (chr, isHexDigit)
 import Data.Foldable (asum)
 import Numeric (readHex)
 import Parser
-  ( Parser (parse),
-    ParserError,
-    anyChar,
-    char,
-    digit,
-    parseFile,
-    parseIf,
-    spaces,
-    string,
-  )
 
 data JsonValue
   = JsonNull
@@ -110,9 +100,10 @@ jsonArray :: Parser JsonValue
 jsonArray = JsonArray <$> array
 
 array :: Parser [JsonValue]
-array = between (char '[') (char ']') (jsonElements <|> [] <$ spaces)
-  where
-    jsonElements = jsonElement `separateBy` char ','
+array = between (char '[') (char ']') content
+
+content :: Parser [JsonValue]
+content = (jsonElement `separateBy` char ',') <|> [] <$ spaces 
 
 jsonElement :: Parser JsonValue
 jsonElement = between spaces spaces jsonValue
@@ -122,7 +113,7 @@ jsonObject :: Parser JsonValue
 jsonObject = JsonObject <$> object
 
 object :: Parser [(String, JsonValue)]
-object = between (char '{') (char '}') (members <|> [] <$ spaces)
+object = between (char '{') (char '}') ([] <$ spaces <|> members)
 
 members :: Parser [(String, JsonValue)]
 members = member `separateBy` char ','
