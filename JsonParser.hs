@@ -1,4 +1,4 @@
-module JsonParser (parse, jsonValue, parseJsonFile) where
+module JsonParser where
 
 import Control.Applicative (Alternative (..), optional)
 import Control.Monad (guard, replicateM)
@@ -103,7 +103,7 @@ array :: Parser [JsonValue]
 array = between (char '[') (char ']') content
 
 content :: Parser [JsonValue]
-content = (jsonElement `separateBy` char ',') <|> [] <$ spaces 
+content = (jsonElement `separateBy` char ',') <|> [] <$ spaces
 
 jsonElement :: Parser JsonValue
 jsonElement = between spaces spaces jsonValue

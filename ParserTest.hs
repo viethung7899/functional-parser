@@ -1,15 +1,40 @@
 {-# LANGUAGE FlexibleContexts #-}
+
 module ParserTest where
 
+import Data.Char (isDigit, isSpace)
+import Data.Either (isLeft, isRight)
 import Parser
-import Data.Either
-import Data.String
-
-import Test.Hspec
+  ( Parser (parse),
+    anyChar,
+    char,
+    digit,
+    makeInput,
+    space,
+    spaces,
+    string,
+  )
+import Test.Hspec (describe, hspec, it)
 import Test.QuickCheck
-import Data.Char (isDigit, isSpace, GeneralCategory (Space))
+  ( Arbitrary (arbitrary),
+    Gen,
+    Property,
+    Testable (property),
+    choose,
+    elements,
+    forAll,
+    listOf,
+    suchThat,
+    (==>),
+  )
 import Test.QuickCheck.Arbitrary (Arbitrary)
-import Demand (postProcessUnsat)
+import TestUtil
+  ( checkParseResult,
+    checkRemainInput,
+    checkResult,
+    parseInput,
+    nonEmptyString
+  )
 
 main :: IO ()
 main = hspec $ do
@@ -50,19 +75,15 @@ main = hspec $ do
       it "parse multiple spaces on space-beginning string" $ do
         property testSpacesOnStringWithSpaces
 
-
-
--- || Testing function definitions
-nonEmptyString :: Gen String
-nonEmptyString = arbitrary `suchThat` (not . null)
-
+-- | | Testing function definitions
 parseEmptyString :: Parser a -> Bool
 parseEmptyString p = isLeft $ parse p (makeInput "")
 
 -- Parse characters
 testMatchingCharacter :: Char -> String -> Bool
-testMatchingCharacter c text = checkParseResult output c && checkRemainInput output text where
-  output = parse (char c) (makeInput (c:text))
+testMatchingCharacter c text = checkParseResult output c && checkRemainInput output text
+  where
+    output = parse (char c) (makeInput (c : text))
 
 testMismatchCharacter :: Property
 testMismatchCharacter = forAll mismatchCharAndString $ \(c, s) -> isLeft $ parse (char c) (makeInput s)
@@ -75,16 +96,18 @@ testCharacterOnEmptyString c = isLeft $ parse (char c) (makeInput "")
 
 -- Parse string
 testMatchingString :: String -> String -> Bool
-testMatchingString s text = checkResult output s text where
-  output = parse (string s) (makeInput (s ++ text))
+testMatchingString s text = checkResult output s text
+  where
+    output = parse (string s) (makeInput (s ++ text))
 
 testMismatchingString :: String -> String -> String -> Property
-testMismatchingString s ns text = (s /= ns && not (null s)) ==> isLeft output where
-  output = parse (string s) (makeInput (ns ++ text))
+testMismatchingString s ns text = (s /= ns && not (null s)) ==> isLeft output
+  where
+    output = parse (string s) (makeInput (ns ++ text))
 
 -- Parse digit
 testOnStringWithDigit :: Property
-testOnStringWithDigit = forAll digitAndString $ \(d, s) -> checkResult (parseInput digit (d:s)) d s
+testOnStringWithDigit = forAll digitAndString $ \(d, s) -> checkResult (parseInput digit (d : s)) d s
 
 digitAndString :: Gen (Char, String)
 digitAndString = (,) <$> choose ('0', '9') <*> arbitrary
@@ -103,23 +126,10 @@ testSpacesOnStringWithoutSpaces :: Property
 testSpacesOnStringWithoutSpaces = forAll stringWithoutSpaces $ \s -> checkResult (parseInput spaces s) "" s
 
 testSpacesOnStringWithSpaces :: Property
-testSpacesOnStringWithSpaces = forAll stringWithSpaces $ \(sp, s) -> checkResult (parseInput spaces (sp++s)) sp s
+testSpacesOnStringWithSpaces = forAll stringWithSpaces $ \(sp, s) -> checkResult (parseInput spaces (sp ++ s)) sp s
 
 stringWithSpaces :: Gen (String, String)
 stringWithSpaces = (,) <$> (listOf . elements) [' ', '\n', '\t', '\r'] <*> stringWithoutSpaces
 
 stringWithoutSpaces :: Gen String
 stringWithoutSpaces = dropWhile isSpace <$> arbitrary
-
------- Extraction function
-checkResult :: (Eq a) => Either ParserError (a, Input) -> a -> String -> Bool
-checkResult output result remain = checkParseResult output result && checkRemainInput output remain
-
-checkParseResult :: Eq a => Either ParserError (a, b) -> a -> Bool
-checkParseResult output result = (fst . head $ rights [output]) == result
-
-checkRemainInput :: Either ParserError (a, Input) -> String -> Bool
-checkRemainInput output remainText = (inputString . snd . head $ rights [output]) == remainText
-
-parseInput :: Parser a -> String -> Either ParserError (a, Input)
-parseInput p s = parse p (makeInput s)
